@@ -20,6 +20,7 @@ for record in records:
     for key in json_dict:
         value = json_dict[key].strip()
         if date_mask.match(value):
+            value = value.split('.')[0]
             value = int(time.mktime(datetime.strptime(value, "%Y-%m-%d %H:%M:%S").timetuple()))
         json_dict[key] = value
     json.dump(json_dict, output_file)

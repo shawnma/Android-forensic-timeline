@@ -6,7 +6,7 @@ then
     exit -1
 fi
 
-echo $4 | egrep "\d{4}-\d{2}-\d{2}" 1>/dev/null 2>&1
+echo $4 | egrep "[0-9]{4}-[0-9]{2}-[0-9]{2}" 1>/dev/null 2>&1
 if [ ! $? -eq 0 ]
 then
     echo 'Invalid start time, date should be like `yyyy-mm-dd`'
@@ -35,12 +35,13 @@ else
 fi
 
 # get timezone from the device
-TIME_ZONE=`adb shell date +%Z`
+# using AWK to convert DOC style newline \r\n to Unix style
+TIME_ZONE=`adb shell date +%Z | awk '{sub("\r$", ""); printf "%s", $0}'`
 echo 'device Timezone: '$TIME_ZONE
 
 echo -ne 'start processing inode times...\t'
 # remove the description on first line
-mactime -b $BODY_FILE -d -y -z $TIME_ZONE $START_TIME | sed '1 d' > $FS_TIMELINE
+mactime -b $BODY_FILE -d -y $START_TIME | sed '1 d' > $FS_TIMELINE
 
 inodes=`cat $BODY_FILE | grep -v 'Orphan' | awk -F '|' '{print $3}' | sort -n | uniq | awk '{printf "%s ", $0}'`
 
@@ -49,11 +50,16 @@ inodes=`cat $BODY_FILE | grep -v 'Orphan' | awk -F '|' '{print $3}' | sort -n | 
 
 for inode in $inodes
 do
-    # when set timezone, all time is set to UTC
     istat=`istat -z $TIME_ZONE -f ext $DD_IMAGE $inode`
     if [ $? -eq 0 ]
     then
-        inode_time=`echo $istat | sed 's/ (UTC)//g' | awk '{printf "%s,", $0}' | sed 's/Direct.*$//' | sed 's/Group.*uid/uid/' | sed 's/num.*Accessed/Accessed/'`
+        inode_time=`echo $istat |
+            sed 's/ ('$TIME_ZONE')//g' |
+            awk '{printf "%s,", $0}' |
+            sed 's/Direct.*$//' |
+            sed 's/Group.*uid/uid/' |
+            sed 's/Flags.*,/,/' |
+            sed 's/num.*Accessed/Accessed/'`
         echo $inode_time | grep 'Not' 1>/dev/null 2>&1
         if [ ! $? -eq 0 ]
         then
@@ -66,7 +72,7 @@ do
             sed 's/Allocated/,allocated/' | 
             sed 's/uid/,uid/' | 
             sed 's/mode/,mode/' | 
-            sed 's/size/,size/' | 
+            #sed 's/size/,size/' | 
             sed 's/Accessed/,accessed/' |
             sed 's/File Modified/,file_modified/' |
             sed 's/Inode Modified/,inode_modified/' |
